@@ -1,0 +1,16 @@
+build/
+bin/
+
+gradlew*
+gradle/
+.gradle/
+
+.idea/
+
+# Generated test output files (can be regenerated with make test-*)
+*_output.txt
+*_test_output.txt
+
+.DS_Store
+.vscode/
+.cursor/
