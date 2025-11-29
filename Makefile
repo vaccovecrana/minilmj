@@ -50,15 +50,23 @@ RESOURCE_DIR := src/main/resources/native/$(OS_NAME)-$(ARCH_NAME)
 # Use native platform optimizations - will be built on target server for minimum supported platforms
 ARCH_FLAGS := -march=native
 
+# Platform-specific target flags for zig cc
+# On Linux, use native-native-gnu to use zig's bundled libc (avoids system header issues)
+# On macOS, don't specify target (zig will use system libc which works fine on macOS)
+ifeq ($(UNAME_S),Linux)
+  ZIG_TARGET := -target native-native-gnu
+else
+  ZIG_TARGET :=
+endif
+
 # Compiler flags
 # Experimenting with aggressive optimizations for ~300ms target
-# Use zig's bundled libc instead of system headers to avoid header dependency issues
-# -target native-native-gnu makes zig use its bundled libc headers
-# We need to ensure system headers aren't found first, so we validate JAVA_HOME
+# On Linux: Use zig's bundled libc instead of system headers to avoid header dependency issues
+# On macOS: Use system libc (which works fine)
 CFLAGS := -std=c11 -g0 -O3 $(ARCH_FLAGS) -ffast-math -ffp-contract=fast -fPIC \
           -funroll-loops -fno-math-errno -fno-trapping-math -fomit-frame-pointer \
           -fno-stack-protector \
-          -target native-native-gnu \
+          $(ZIG_TARGET) \
           -I src/main/c -I src/main/c/tokenizer $(JAVA_INCLUDES)
 LDFLAGS := -O3 -flto -Wl,--gc-sections
 
