@@ -150,7 +150,7 @@ public final class MiniLM implements AutoCloseable {
   }
 
   /**
-   * Generate embeddings for a list of texts.
+   * Generate embeddings for a list of texts. This method is thread-safe and can be used concurrently.
    *
    * @param texts      List of input texts to embed
    * @param concurrent If true, process embeddings concurrently using a thread pool.
@@ -214,7 +214,6 @@ public final class MiniLM implements AutoCloseable {
   }
 
   @Override public void close() {
-    // Shutdown executor service if it exists
     synchronized (this) {
       if (executorService != null && !executorService.isShutdown()) {
         executorService.shutdown();
@@ -228,8 +227,6 @@ public final class MiniLM implements AutoCloseable {
         }
       }
     }
-    
-    // Destroy native session
     if (sessionHandle != 0) {
       nDestroy(sessionHandle);
     }

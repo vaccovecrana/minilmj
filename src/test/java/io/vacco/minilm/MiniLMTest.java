@@ -361,6 +361,66 @@ public class MiniLMTest {
           System.out.printf("    - Throughput: %.2f embeddings/second%n", (texts.size() / totalTime) * 1000.0);
           
           assertEquals("All embeddings should succeed", texts.size(), successCount);
+          
+          // Verify semantic correctness after concurrent processing
+          // This ensures multithreaded processing doesn't corrupt embedding data
+          System.out.printf("%n  Verifying semantic correctness after concurrent processing:%n");
+          
+          // Extract city embeddings (first 5 are city names)
+          float[][] cityEmbeddings = new float[5][];
+          String[] cities = {"paris", "london", "berlin", "madrid", "rome"};
+          for (int i = 0; i < 5; i++) {
+            cityEmbeddings[i] = embeddings.get(i);
+          }
+          
+          // Extract query embeddings (indices 5-9 are queries)
+          String[] queries = {
+            "what's the capital of germany?",
+            "what's the capital of france?",
+            "the capital city of spain",
+            "germany's capital",
+            "italy capital city"
+          };
+          String[] expectedAnswers = {"berlin", "paris", "madrid", "berlin", "rome"};
+          
+          int semanticPassed = 0;
+          for (int q = 0; q < queries.length; q++) {
+            float[] queryEmbedding = embeddings.get(5 + q);
+            String expected = expectedAnswers[q];
+            
+            // Find nearest neighbor using cosine similarity (dot product)
+            int bestIndex = -1;
+            float bestSimilarity = Float.NEGATIVE_INFINITY;
+            
+            for (int i = 0; i < cityEmbeddings.length; i++) {
+              // Compute dot product (cosine similarity for normalized vectors)
+              float similarity = 0.0f;
+              for (int j = 0; j < EMBEDDING_SIZE; j++) {
+                similarity += queryEmbedding[j] * cityEmbeddings[i][j];
+              }
+              
+              assertFalse("Similarity should not be NaN", Float.isNaN(similarity));
+              assertFalse("Similarity should not be Infinite", Float.isInfinite(similarity));
+              
+              if (similarity > bestSimilarity) {
+                bestSimilarity = similarity;
+                bestIndex = i;
+              }
+            }
+            
+            String result = cities[bestIndex];
+            boolean correct = result.equals(expected);
+            if (correct) {
+              semanticPassed++;
+            }
+            
+            System.out.printf("    Query: '%s' -> '%s' (expected: '%s', similarity: %.6f) %s%n",
+                queries[q], result, expected, bestSimilarity, correct ? "✓" : "✗");
+          }
+          
+          System.out.printf("  Semantic correctness: %d/%d passed%n", semanticPassed, queries.length);
+          assertEquals("All semantic queries should pass after concurrent processing", 
+              queries.length, semanticPassed);
         } catch (Exception e) {
           throw new RuntimeException(e);
         }
@@ -368,7 +428,6 @@ public class MiniLMTest {
 
     });
   }
-
 
   private static float[] loadGoldenTensor(String path) throws IOException {
     try (FileInputStream fis = new FileInputStream(path);
