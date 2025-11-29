@@ -16,13 +16,27 @@ ifeq ($(JAVA_HOME),)
     ifeq ($(UNAME_S),Darwin)
       JAVA_HOME := $(shell find /Library/Java/JavaVirtualMachines -name "Home" -type d 2>/dev/null | head -1)
     else
+      # Try to find JAVA_HOME from java executable
       JAVA_HOME := $(shell readlink -f /usr/bin/java 2>/dev/null | sed "s:bin/java::")
+      # If JAVA_HOME is /usr/, try alternative detection methods
+      ifeq ($(JAVA_HOME),/usr)
+        JAVA_HOME := $(shell find /usr/lib/jvm -maxdepth 1 -type d 2>/dev/null | grep -E "(java|jdk|jre)" | head -1)
+      endif
+      # If still /usr/, try to find from update-alternatives
+      ifeq ($(JAVA_HOME),/usr)
+        JAVA_HOME := $(shell update-alternatives --list java 2>/dev/null | head -1 | sed "s:bin/java::")
+      endif
     endif
   endif
 endif
 
 ifeq ($(JAVA_HOME),)
   $(error JAVA_HOME not found. Please set JAVA_HOME environment variable or ensure Java is installed.)
+endif
+
+# Validate JAVA_HOME is not /usr/ (which would cause /usr//include issues)
+ifeq ($(JAVA_HOME),/usr)
+  $(error Invalid JAVA_HOME detected: /usr/. Please set JAVA_HOME to a valid JDK installation path (e.g., /usr/lib/jvm/java-11-openjdk-amd64).)
 endif
 
 # Platform-specific settings
@@ -56,6 +70,8 @@ ARCH_FLAGS := -march=native
 # Compiler flags
 # Experimenting with aggressive optimizations for ~300ms target
 # Use zig's bundled libc instead of system headers to avoid header dependency issues
+# -target native-native-gnu makes zig use its bundled libc headers
+# We need to ensure system headers aren't found first, so we validate JAVA_HOME
 CFLAGS := -std=c11 -g0 -O3 $(ARCH_FLAGS) -ffast-math -ffp-contract=fast -fPIC \
           -funroll-loops -fno-math-errno -fno-trapping-math -fomit-frame-pointer \
           -fno-stack-protector \
