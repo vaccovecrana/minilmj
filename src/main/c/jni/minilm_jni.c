@@ -1,6 +1,5 @@
 #include <jni.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdio.h>
 #include "minilm.h"
 #include "tensor.h"
 
@@ -85,8 +84,21 @@ Java_io_vacco_minilm_MiniLM_nEmbed(JNIEnv *env, jclass clazz, jlong sessionHandl
 
     if (status != T_OK)
     {
-        (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
-                         "Failed to generate embedding");
+        char error_msg[256];
+        if (status == T_TOKEN_LIMIT_EXCEEDED)
+        {
+            snprintf(error_msg, sizeof(error_msg),
+                     "Token limit exceeded (max %zu tokens). Please retry with shorter text.",
+                     MINILM_MAX_TOKENS);
+            (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/IllegalArgumentException"),
+                             error_msg);
+        }
+        else
+        {
+            snprintf(error_msg, sizeof(error_msg), "Failed to generate embedding");
+            (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/RuntimeException"),
+                             error_msg);
+        }
         return NULL;
     }
 

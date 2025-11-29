@@ -2,9 +2,12 @@
 
 #include <stddef.h>
 #include "tensor.h"
-#include "tokenizer.h"
-#include "s8.h"
-#include "da.h"
+#include "tokenizer/tokenizer.h"
+#include "tokenizer/s8.h"
+#include "tokenizer/da.h"
+
+// Maximum number of tokens supported by the model
+static const size_t MINILM_MAX_TOKENS = 256;
 
 typedef struct minilm_t minilm_t;
 
@@ -31,9 +34,6 @@ t_status minilm_encode(minilm_t m, da_u32 ids, tensor_t *out);
 
 /// @brief Tokenize a string into a tensor of token ids
 t_status minilm_tokenize(minilm_t m, s8 str, da_u32 *ids);
-
-/// @brief Embedder forward (embeddings + layer norm) - for testing
-tensor_t minilm_embedder_forward(da_u32 ids, minilm_t weights);
 
 /// PyTorch reference:
 /// ```python
@@ -134,9 +134,3 @@ typedef struct minilm_t
   tensor_t output_ln_gamma; // [1, HIDDEN_SIZE]
   tensor_t output_ln_beta;  // [1, HIDDEN_SIZE]
 } minilm_t;
-
-/// @brief Encoder layer forward (transformer layer) - for testing
-t_status minilm_encoder_forward(const tensor_t in, bert_layer_weigts_t weights, tensor_t *out);
-
-/// @brief Output layer forward (dense + residual + layer norm) - for testing
-t_status minilm_output_forward(tensor_t *out, const tensor_t hidden_states, const tensor_t input_tensor, struct output_layer_t params);

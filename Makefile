@@ -1,14 +1,12 @@
-# ---- Config ----
-CC      := clang
-BUILD   := build
-TARGET  := $(BUILD)/example
+# Simple Makefile for MiniLM library
+CC := zig cc
+BUILD := build
 
 # Detect platform
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
-INCLUDES := -I src/main/c -I src/main/c/tokenizer
-
+# Find JAVA_HOME
 ifeq ($(JAVA_HOME),)
   JAVA_HOME := $(shell /usr/libexec/java_home 2>/dev/null)
   ifeq ($(JAVA_HOME),)
@@ -27,32 +25,43 @@ ifeq ($(JAVA_HOME),)
   $(error JAVA_HOME not found. Please set JAVA_HOME environment variable or ensure Java is installed.)
 endif
 
+# Platform-specific settings
 ifeq ($(UNAME_S),Darwin)
-  INCLUDES += -I $(JAVA_HOME)/include -I $(JAVA_HOME)/include/darwin
+  JAVA_INCLUDES := -I $(JAVA_HOME)/include -I $(JAVA_HOME)/include/darwin
   LIB_EXT := dylib
-  LIB_NAME := libminilm.dylib
+  OS_NAME := macos
 else ifeq ($(UNAME_S),Linux)
-  INCLUDES += -I $(JAVA_HOME)/include -I $(JAVA_HOME)/include/linux
+  JAVA_INCLUDES := -I $(JAVA_HOME)/include -I $(JAVA_HOME)/include/linux
   LIB_EXT := so
-  LIB_NAME := libminilm.so
+  OS_NAME := linux
 else
   $(error Unsupported platform: $(UNAME_S))
 endif
 
-# CFLAGS for tests (with sanitizer)
-CFLAGS_TEST := -std=c11 -g -O3 -ffast-math -march=native -mtune=native -ffp-contract=fast -fsanitize=address $(INCLUDES)
+# Detect architecture
+ifeq ($(filter aarch64 arm64,$(UNAME_M)),$(UNAME_M))
+  ARCH_NAME := arm64
+else ifeq ($(filter x86_64 amd64,$(UNAME_M)),$(UNAME_M))
+  ARCH_NAME := amd64
+else
+  $(error Unsupported architecture: $(UNAME_M))
+endif
 
-# CFLAGS for library (no sanitizer, position independent code)
-CFLAGS_LIB := -std=c11 -g -O3 -ffast-math -march=native -mtune=native -ffp-contract=fast -fPIC $(INCLUDES)
+# Java resource directory for native libraries
+RESOURCE_DIR := src/main/resources/native/$(OS_NAME)-$(ARCH_NAME)
 
-# Default to test flags for backward compatibility
-CFLAGS := $(CFLAGS_TEST)
-LDFLAGS := -fsanitize=address
-LDLIBS  :=
-SRCS := $(filter-out src/main/c/%_test.c src/main/c/tokenizer/%_test.c,$(wildcard src/main/c/*.c) $(wildcard src/main/c/tokenizer/*.c)) src/test/c/example.c
+# Use native platform optimizations - will be built on target server for minimum supported platforms
+ARCH_FLAGS := -march=native
 
-OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
+# Compiler flags
+# Experimenting with aggressive optimizations for ~300ms target
+CFLAGS := -std=c11 -g0 -O3 $(ARCH_FLAGS) -ffast-math -ffp-contract=fast -fPIC \
+          -funroll-loops -fno-math-errno -fno-trapping-math -fomit-frame-pointer \
+          -fno-stack-protector \
+          -I src/main/c -I src/main/c/tokenizer $(JAVA_INCLUDES)
+LDFLAGS := -O3 -flto -Wl,--gc-sections
 
+# Source files
 LIB_SRCS := src/main/c/minilm.c \
             src/main/c/nn.c \
             src/main/c/tensor.c \
@@ -63,84 +72,90 @@ LIB_SRCS := src/main/c/minilm.c \
             src/main/c/tokenizer/s8.c \
             src/main/c/jni/minilm_jni.c
 
+TEST_SRCS := src/test/c/embedding_timing_test.c \
+             src/test/c/tokenizer_test.c \
+             src/test/c/minilm_test.c \
+             src/test/c/tensor_test.c \
+             src/test/c/trie_test.c \
+             src/test/c/gradual_token_test.c
+# Debug test (optional):
+#             src/test/c/debug_attention_mask.c
+
+# Object files
 LIB_OBJS := $(patsubst src/main/c/%.c,$(BUILD)/lib/%.o,$(LIB_SRCS))
+TEST_OBJS := $(patsubst src/test/c/%.c,$(BUILD)/test/%.o,$(TEST_SRCS))
 
-# ---- Rules ----
-.PHONY: all help run clean libminilm.dylib libminilm.so libminilm test-tokenizer test-minilm
+.PHONY: all libminilm copyResources test run-tests clean
 
-all: libminilm
+all: libminilm copyResources test run-tests
+	@echo "✓ Build complete (run 'make test' to build tests)"
 
-help:
-	@echo "Available targets:"
-	@echo "  make libminilm     - Build the native library (default)"
-	@echo "  make clean         - Clean build artifacts"
-	@echo "  make all           - Same as 'make libminilm'"
-	@echo "  make help          - Show this help message"
-	@echo ""
-	@echo "Test targets:"
-	@echo "  make test-tokenizer"
-	@echo "  make test-minilm"
-	@echo ""
-	@echo "Platform: $(UNAME_S) ($(UNAME_M))"
-	@echo "JAVA_HOME: $(JAVA_HOME)"
-	@echo "Library: $(LIB_NAME)"
+# Build library
+libminilm: $(BUILD)/lib/libminilm.$(LIB_EXT)
+	@echo "✓ Built libminilm.$(LIB_EXT)"
 
-# Example executable target (optional - only build if example.c exists)
-ifneq ($(wildcard src/test/c/example.c),)
-$(TARGET): $(OBJS) | $(BUILD)
-	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
-endif
-
-# ---- Library Build ----
-# Build shared library for macOS
-libminilm.dylib: $(LIB_OBJS) | $(BUILD)/lib
-	$(CC) -shared -install_name @rpath/libminilm.dylib -o $(BUILD)/lib/libminilm.dylib $(LIB_OBJS) $(LDLIBS)
-
-# Build shared library for Linux
-libminilm.so: $(LIB_OBJS) | $(BUILD)/lib
-	$(CC) -shared -fPIC -o $(BUILD)/lib/libminilm.so $(LIB_OBJS) $(LDLIBS)
-
-libminilm: $(LIB_NAME)
-	@echo ""
-	@echo "✓ Successfully built $(LIB_NAME)"
-	@echo "  Location: $(BUILD)/lib/$(LIB_NAME)"
-	@echo ""
+# Copy library to Java resources directory
+copyResources: libminilm
+	@mkdir -p $(RESOURCE_DIR)
+	@cp $(BUILD)/lib/libminilm.$(LIB_EXT) $(RESOURCE_DIR)/libminilm.$(LIB_EXT)
+	@echo "✓ Copied libminilm.$(LIB_EXT) to $(RESOURCE_DIR)/"
 
 $(BUILD)/lib/%.o: src/main/c/%.c | $(BUILD)/lib
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_LIB) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-TOKENIZER_TEST_SRCS := src/main/c/tokenizer/tokenizer_test.c src/main/c/tokenizer/tokenizer.c src/main/c/tokenizer/trie.c src/main/c/tokenizer/str.c src/main/c/tokenizer/s8.c
-TOKENIZER_TEST_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(TOKENIZER_TEST_SRCS))
-$(BUILD)/tokenizer_test: $(TOKENIZER_TEST_OBJS) | $(BUILD)
-	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+$(BUILD)/lib/libminilm.$(LIB_EXT): $(LIB_OBJS) | $(BUILD)/lib
+	$(CC) -shared $(LDFLAGS) -fPIC -o $@ $^
+ifeq ($(UNAME_S),Darwin)
+	install_name_tool -id @rpath/libminilm.dylib $@
+endif
 
-MINILM_TEST_SRCS := src/main/c/minilm_test.c src/main/c/minilm.c src/main/c/nn.c src/main/c/tensor.c src/main/c/tbf.c src/main/c/tokenizer/tokenizer.c src/main/c/tokenizer/trie.c src/main/c/tokenizer/str.c src/main/c/tokenizer/s8.c
-MINILM_TEST_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(MINILM_TEST_SRCS))
-$(BUILD)/minilm_test: $(MINILM_TEST_OBJS) | $(BUILD)
-	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+# Test executables
+TEST_EXES := $(patsubst src/test/c/%.c,$(BUILD)/test/%,$(TEST_SRCS))
 
-test-tokenizer: $(BUILD)/tokenizer_test
-	cd src/main/c/tokenizer && ../../../$(BUILD)/tokenizer_test
+test: $(TEST_EXES)
+	@echo "✓ All tests built"
 
-test-minilm: $(BUILD)/minilm_test
-	cd src/main/c && ../../$(BUILD)/minilm_test
+# Run tests
+run-tests: test
+	@echo "Running all tests..."
+	@echo ""
+	@echo "=== Tokenizer Test ==="
+	@$(BUILD)/test/tokenizer_test || true
+	@echo ""
+	@echo "=== Trie Test ==="
+	@$(BUILD)/test/trie_test || true
+	@echo ""
+	@echo "=== Tensor Test ==="
+	@$(BUILD)/test/tensor_test || true
+	@echo ""
+	@echo "=== Gradual Token Test ==="
+	@$(BUILD)/test/gradual_token_test || true
+	@echo ""
+	@echo "=== MiniLM Semantic Test ==="
+	@$(BUILD)/test/minilm_test || true
+	@echo ""
+	@echo "=== Embedding Timing Test ==="
+	@$(BUILD)/test/embedding_timing_test || true
+	@echo ""
+	@echo "✓ All tests completed"
 
-$(BUILD)/%.o: %.c | $(BUILD)
+$(BUILD)/test/%.o: src/test/c/%.c | $(BUILD)/test
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS_TEST) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD):
-	@mkdir -p $(BUILD)
+# All tests use shared library for performance
+$(BUILD)/test/%: $(BUILD)/test/%.o $(BUILD)/lib/libminilm.$(LIB_EXT) | $(BUILD)/test
+	$(CC) -L$(BUILD)/lib -Wl,-rpath,$(BUILD)/lib $(LDFLAGS) $< -lminilm -lm -o $@
 
+# Build directories
 $(BUILD)/lib:
 	@mkdir -p $(BUILD)/lib
 
-run: $(TARGET)
-	time ./$(TARGET)
+$(BUILD)/test:
+	@mkdir -p $(BUILD)/test
 
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -rf $(BUILD)
-	rm -f *_output.txt *_test_output.txt
+	@rm -rf $(BUILD)
 	@echo "✓ Clean complete"

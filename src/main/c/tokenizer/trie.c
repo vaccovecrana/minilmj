@@ -6,12 +6,12 @@
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-trie_t *trie_find_child(trie_t n, uint8_t b)
+trie_t *trie_find_child(const trie_t *n, uint8_t b)
 {
-    for (int i = 0; i < n.length; i++)
-        if (n.children[i].key == b)
+    for (int i = 0; i < n->length; i++)
+        if (n->children[i].key == b)
         {
-            return &n.children[i];
+            return &n->children[i];
         }
     return NULL;
 }
@@ -41,7 +41,7 @@ int trie_insert(trie_t *t, const uint8_t *token, uint32_t value)
     for (int i = 0; token[i] != '\0'; ++i)
     {
         uint8_t b = token[i];
-        trie_t *child = trie_find_child(*node, b);
+        trie_t *child = trie_find_child(node, b);
         if (child == NULL)
         {
             child = trie_add_child(node, b);
@@ -55,14 +55,14 @@ int trie_insert(trie_t *t, const uint8_t *token, uint32_t value)
     return 0;
 }
 
-const trie_t *trie_longest(const trie_t t, const uint8_t *s, int len, int *offset)
+const trie_t *trie_longest(const trie_t *t, const uint8_t *s, int len, int *offset)
 {
-    const trie_t *node = &t;
+    const trie_t *node = t;
     *offset = 0;
     for (int i = 0; i < len; ++i)
     {
         uint8_t b = s[i];
-        trie_t *child = trie_find_child(*node, b);
+        trie_t *child = trie_find_child(node, b);
 
         if (child == NULL)
             break;

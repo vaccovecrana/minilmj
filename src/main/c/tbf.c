@@ -129,7 +129,7 @@ void tbf_print_tensors(TbfFile tf)
     printf("TBF file contains %llu tensors: \n", (unsigned long long)tf.count);
     for (uint64_t i = 0; i < tf.count; ++i)
     {
-        printf("%-50s (dtype=%d, ndim=%d, nbytes=%8llu, offset=%llu, shape=(", tf.tensors[i].name, tf.tensors[i].dtype, tf.tensors[i].ndim, tf.tensors[i].nbytes, tf.tensors[i].offset);
+        printf("%-50s (dtype=%d, ndim=%d, nbytes=%8lu, offset=%lu, shape=(", tf.tensors[i].name, tf.tensors[i].dtype, tf.tensors[i].ndim, (unsigned long)tf.tensors[i].nbytes, (unsigned long)tf.tensors[i].offset);
         for (uint8_t j = 0; j < tf.tensors[i].ndim; ++j)
             printf("%d, ", tf.tensors[i].dims[j]);
         printf("))\n");

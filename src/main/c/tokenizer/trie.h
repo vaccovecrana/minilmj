@@ -20,7 +20,7 @@ int trie_destroy(trie_t *t);
 int trie_insert(trie_t *t, const uint8_t *token, uint32_t value);
 
 // Step one byte from a node, return child node index or -1 if no edge
-trie_t *trie_find_child(trie_t n, uint8_t b);
+trie_t *trie_find_child(const trie_t *n, uint8_t b);
 
 // Greedy longest match starting from `start_node`
 //   s      = pointer to bytes
@@ -28,7 +28,7 @@ trie_t *trie_find_child(trie_t n, uint8_t b);
 //   out_id = best token ID found (-1 if none)
 //   out_len= length of that best match in bytes
 // Returns 1 if any match found, 0 if no match
-const trie_t *trie_longest(const trie_t t, const uint8_t *s, int len, int *offset);
+const trie_t *trie_longest(const trie_t *t, const uint8_t *s, int len, int *offset);
 
 // Debugging functions
 void trie_dump(trie_t t);

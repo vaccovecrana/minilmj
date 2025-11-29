@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-#include "da.h"
 #include "s8.h"
 #include "str.h"
 
@@ -57,8 +56,8 @@ int tokenizer_create(tokenizer_t *tok, const char *vocab_txt_path)
 
 int tokenizer_encode(const tokenizer_t tok, uint8_t *text, int text_len, da_u32 *out_ids)
 {
-    const trie_t *continuation_tree = trie_find_child(tok.trie, '#');
-    continuation_tree = trie_find_child(*continuation_tree, '#');
+    const trie_t *continuation_tree = trie_find_child(&tok.trie, '#');
+    continuation_tree = trie_find_child(continuation_tree, '#');
 
     if (continuation_tree == NULL)
     {
@@ -73,7 +72,7 @@ int tokenizer_encode(const tokenizer_t tok, uint8_t *text, int text_len, da_u32 
     {
         s8 part = parts.data[i];
         int depth = 0;
-        const trie_t *node = trie_longest(tok.trie, part.data, part.len, &depth);
+        const trie_t *node = trie_longest(&tok.trie, part.data, part.len, &depth);
         if (node == NULL)
         {
             return 1;
@@ -85,7 +84,7 @@ int tokenizer_encode(const tokenizer_t tok, uint8_t *text, int text_len, da_u32 
             continue;
 
         // now the remaining part of the text
-        const trie_t *cont_node = trie_longest(*continuation_tree, part.data + depth, remaining_len, &depth);
+        const trie_t *cont_node = trie_longest(continuation_tree, part.data + depth, remaining_len, &depth);
         if (cont_node == NULL)
         {
             return 1;

@@ -156,10 +156,11 @@ tensor_t tensor_slice(const tensor_t *t, int dim, uint64_t idx, bool keepdim)
     uint8_t ndim = t->ndim;
     if (dim < 0)
         dim += ndim;
-    // bounds
-    // if (dim < 0 || dim >= ndim || idx >= t->dims[dim])
-    // return (tensor_t){0};
-    assert(dim >= 0 && dim < ndim && idx < t->dims[dim]);
+    // bounds check - return zero tensor instead of crashing
+    if (dim < 0 || dim >= ndim || idx >= t->dims[dim])
+    {
+        return (tensor_t){0};
+    }
 
     // compute new base pointer
     float *base = t->data + idx * t->strides[dim];

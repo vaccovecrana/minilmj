@@ -4,7 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <math.h>
 #include "tbf.h"
 #include "nn.h"
 #include "s8.h"
@@ -25,12 +24,18 @@ t_status minilm_tokenize(minilm_t m, s8 str, da_u32 *ids)
 {
     m_try(tokenizer_encode(m.tokenizer, (uint8_t *)str.data, str.len, ids));
 
-    // pad up to 128
-    for (size_t i = ids->len; i < 128; i++)
+    // Check if token count exceeds limit BEFORE padding
+    if (ids->len > MINILM_MAX_TOKENS)
+    {
+        return T_TOKEN_LIMIT_EXCEEDED;
+    }
+
+    // pad up to MINILM_MAX_TOKENS
+    for (size_t i = ids->len; i < MINILM_MAX_TOKENS; i++)
     {
         da_u32_append(ids, 0);
     }
-    
+
     return T_OK;
 }
 
@@ -97,11 +102,12 @@ tensor_t minilm_embedder_forward(da_u32 ids, minilm_t weights)
 
     uint32_t *token_type_ids = (uint32_t *)calloc(num_tokens, sizeof(uint32_t));
     nn_embeddings_forward(&type_out, token_type_ids, num_tokens, weights.embeddings.type);
+    free(token_type_ids);
 
     tensor_binary_op(word_out, pos_out, B_ADD);
     tensor_binary_op(word_out, type_out, B_ADD);
 
-    // layer norm
+    // layer norm - reuse pos_out as output (it gets overwritten)
     tensor_t ln_gamma = weights.embeddings.ln_gamma;
     tensor_t ln_beta = weights.embeddings.ln_beta;
     int res = nn_layer_norm_forward(&pos_out, word_out, ln_gamma, ln_beta);
@@ -125,7 +131,8 @@ t_status minilm_output_forward(tensor_t *out, const tensor_t hidden_states, cons
     return T_OK;
 }
 
-t_status minilm_encoder_forward(const tensor_t in, bert_layer_weigts_t weights, tensor_t *out)
+t_status minilm_encoder_forward(const tensor_t in, bert_layer_weigts_t weights, tensor_t *out, 
+                                const uint32_t *token_ids, size_t num_tokens)
 {
     tensor_t q, k, v;
     tensor_t self_out;
@@ -134,7 +141,7 @@ t_status minilm_encoder_forward(const tensor_t in, bert_layer_weigts_t weights, 
     nn_linear_forward(&k, in, weights.key, weights.key_bias);
     nn_linear_forward(&v, in, weights.value, weights.value_bias);
 
-    m_try(nn_dot_product_attention_forward(&self_out, q, k, v, 12));
+    m_try(nn_dot_product_attention_forward(&self_out, q, k, v, 12, token_ids, num_tokens));
 
     tensor_t tmp;
     minilm_output_forward(&tmp, self_out, in, weights.output);
@@ -159,14 +166,16 @@ t_status minilm_encoder_forward(const tensor_t in, bert_layer_weigts_t weights, 
 t_status minilm_encode(minilm_t weights, da_u32 ids, tensor_t *out)
 {
     tensor_t embedder_out = minilm_embedder_forward(ids, weights);
-    tensor_t tmp;
     for (size_t i = 0; i < 6; i++)
     {
-        m_try(minilm_encoder_forward(embedder_out, weights.attention[i], &tmp));
+        tensor_t tmp;
+        m_try(minilm_encoder_forward(embedder_out, weights.attention[i], &tmp, ids.data, ids.len));
+        // Destroy the old embedder_out before reassigning
+        tensor_destroy(&embedder_out);
         embedder_out = tmp;
     }
     tensor_t pooled_out;
-    nn_mean_pooling(&pooled_out, embedder_out, embedder_out);
+    nn_mean_pooling(&pooled_out, embedder_out, ids.data, ids.len);
     nn_normalize(&pooled_out);
 
     tensor_destroy(&embedder_out);
@@ -193,8 +202,12 @@ t_status minilm_embed(minilm_t m, char *str, size_t str_len, tensor_t *out)
 {
     s8 str_s8 = s8_from_parts(str, str_len);
     da_u32 ids = {0};
-    minilm_tokenize(m, str_s8, &ids);
-    
+    t_status status = minilm_tokenize(m, str_s8, &ids);
+    if (status != T_OK)
+    {
+        da_u32_free(&ids);
+        return status;
+    }
     m_try(minilm_encode(m, ids, out));
     da_u32_free(&ids);
     return T_OK;

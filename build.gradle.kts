@@ -8,30 +8,30 @@ configure<io.vacco.oss.gitflow.GsPluginProfileExtension> {
   sharedLibrary(true, false)
 }
 
-val osName = System.getProperty("os.name").lowercase()
-val osArch = System.getProperty("os.arch").lowercase()
-
-val libraryName = when {
-    osName.contains("mac") || osName.contains("darwin") -> "libminilm.dylib"
-    osName.contains("linux") -> "libminilm.so"
-    else -> throw UnsupportedOperationException("Unsupported platform: $osName ($osArch)")
-}
-
 val nativeLibDir = file("src/main/resources/native")
-val buildLibPath = file("build/lib/$libraryName")
 
-tasks.register("copyNativeLibrary", Copy::class) {
+tasks.register("copyNativeLibraries", Copy::class) {
     group = "build"
-    description = "Copy native library to resources directory"
-    from(buildLibPath)
+    description = "Copy cross-compiled native libraries to resources directory"
+    from("build/lib/linux-amd64/libminilm.so") {
+        into("linux-amd64")
+    }
+    from("build/lib/macos-amd64/libminilm.dylib") {
+        into("macos-amd64")
+    }
+    from("build/lib/linux-arm64/libminilm.so") {
+        into("linux-arm64")
+    }
+    from("build/lib/macos-arm64/libminilm.dylib") {
+        into("macos-arm64")
+    }
     into(nativeLibDir)
-    rename { libraryName }
 }
 
 tasks.named("processResources") {
-    dependsOn("copyNativeLibrary")
+    dependsOn("copyNativeLibraries")
 }
 
 tasks.named("sourcesJar") {
-    dependsOn("copyNativeLibrary")
+    dependsOn("copyNativeLibraries")
 }

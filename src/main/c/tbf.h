@@ -9,7 +9,8 @@
 typedef enum
 {
   T_OK = 0,
-  T_ERR
+  T_ERR,
+  T_TOKEN_LIMIT_EXCEEDED
 } t_status;
 
 // DTYPE_MAP = {
