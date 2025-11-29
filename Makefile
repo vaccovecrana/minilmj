@@ -36,19 +36,20 @@ else
 endif
 
 # Detect architecture
+# For x86-64: Use generic x86-64 baseline with native tuning for better portability
+# For ARM64: Use native optimizations (no specific baseline needed)
 ifeq ($(filter aarch64 arm64,$(UNAME_M)),$(UNAME_M))
   ARCH_NAME := arm64
+	ARCH_FLAGS := -march=native
 else ifeq ($(filter x86_64 amd64,$(UNAME_M)),$(UNAME_M))
   ARCH_NAME := amd64
+  ARCH_FLAGS := -march=x86-64 -mtune=native
 else
   $(error Unsupported architecture: $(UNAME_M))
 endif
 
 # Java resource directory for native libraries
 RESOURCE_DIR := src/main/resources/native/$(OS_NAME)-$(ARCH_NAME)
-
-# Use native platform optimizations - will be built on target server for minimum supported platforms
-ARCH_FLAGS := -march=native
 
 # Platform-specific target flags for zig cc
 # On Linux, use native-native-gnu to use zig's bundled libc (avoids system header issues)
