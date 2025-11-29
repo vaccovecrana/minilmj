@@ -55,9 +55,11 @@ ARCH_FLAGS := -march=native
 
 # Compiler flags
 # Experimenting with aggressive optimizations for ~300ms target
+# Use zig's bundled libc instead of system headers to avoid header dependency issues
 CFLAGS := -std=c11 -g0 -O3 $(ARCH_FLAGS) -ffast-math -ffp-contract=fast -fPIC \
           -funroll-loops -fno-math-errno -fno-trapping-math -fomit-frame-pointer \
           -fno-stack-protector \
+          -target native-native-gnu \
           -I src/main/c -I src/main/c/tokenizer $(JAVA_INCLUDES)
 LDFLAGS := -O3 -flto -Wl,--gc-sections
 
