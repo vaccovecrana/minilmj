@@ -68,7 +68,15 @@ CFLAGS := -std=c11 -g0 -O3 $(ARCH_FLAGS) -ffast-math -ffp-contract=fast -fPIC \
           -fno-stack-protector \
           $(ZIG_TARGET) \
           -I src/main/c -I src/main/c/tokenizer $(JAVA_INCLUDES)
-LDFLAGS := -O3 -flto -Wl,--gc-sections
+
+# Platform-specific linker flags
+# On Linux: Enable LTO and garbage collection of unused sections
+# On macOS: Disable LTO (requires LLD which may not be available) but keep other optimizations
+ifeq ($(UNAME_S),Linux)
+  LDFLAGS := -O3 -flto -Wl,--gc-sections
+else
+  LDFLAGS := -O3
+endif
 
 # Source files
 LIB_SRCS := src/main/c/minilm.c \
