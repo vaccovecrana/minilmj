@@ -26,10 +26,24 @@ public final class MiniLM implements AutoCloseable {
    *
    * @param tbfPath   Path to the BERT weights file (.tbf)
    * @param vocabPath Path to the vocabulary file (vocab.txt)
+   * @throws IllegalArgumentException if model or vocabulary files cannot be found
    * @throws RuntimeException if session creation fails
    */
   public MiniLM(String tbfPath, String vocabPath) {
     loadLibrary();
+
+    var tbfFile = new File(tbfPath);
+    if (!tbfFile.exists() || !tbfFile.isFile()) {
+      throw new IllegalArgumentException(
+        "Model file not found: " + tbfPath + " (absolute path: " + tbfFile.getAbsolutePath() + ")");
+    }
+
+    var vocabFile = new File(vocabPath);
+    if (!vocabFile.exists() || !vocabFile.isFile()) {
+      throw new IllegalArgumentException(
+        "Vocabulary file not found: " + vocabPath + " (absolute path: " + vocabFile.getAbsolutePath() + ")");
+    }
+
     long handle = nCreate(tbfPath, vocabPath);
     if (handle == 0) {
       throw new RuntimeException("Failed to create MiniLM session");

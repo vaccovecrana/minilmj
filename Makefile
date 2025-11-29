@@ -2,41 +2,24 @@
 CC := zig cc
 BUILD := build
 
+# Require JAVA_HOME to be set - fail immediately if not defined
+ifeq ($(JAVA_HOME),)
+  $(error JAVA_HOME is not defined. Please set JAVA_HOME environment variable to your JDK installation path.)
+endif
+
 # Detect platform
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
 
-# Find JAVA_HOME
-ifeq ($(JAVA_HOME),)
-  JAVA_HOME := $(shell /usr/libexec/java_home 2>/dev/null)
-  ifeq ($(JAVA_HOME),)
-    JAVA_HOME := $(shell java -XshowSettings:properties -version 2>&1 | grep 'java.home' | sed 's/.*java.home = //' | head -1)
-  endif
-  ifeq ($(JAVA_HOME),)
-    ifeq ($(UNAME_S),Darwin)
-      JAVA_HOME := $(shell find /Library/Java/JavaVirtualMachines -name "Home" -type d 2>/dev/null | head -1)
-    else
-      # Try to find JAVA_HOME from java executable
-      JAVA_HOME := $(shell readlink -f /usr/bin/java 2>/dev/null | sed "s:bin/java::")
-      # If JAVA_HOME is /usr/, try alternative detection methods
-      ifeq ($(JAVA_HOME),/usr)
-        JAVA_HOME := $(shell find /usr/lib/jvm -maxdepth 1 -type d 2>/dev/null | grep -E "(java|jdk|jre)" | head -1)
-      endif
-      # If still /usr/, try to find from update-alternatives
-      ifeq ($(JAVA_HOME),/usr)
-        JAVA_HOME := $(shell update-alternatives --list java 2>/dev/null | head -1 | sed "s:bin/java::")
-      endif
-    endif
-  endif
-endif
-
-ifeq ($(JAVA_HOME),)
-  $(error JAVA_HOME not found. Please set JAVA_HOME environment variable or ensure Java is installed.)
-endif
-
 # Validate JAVA_HOME is not /usr/ (which would cause /usr//include issues)
 ifeq ($(JAVA_HOME),/usr)
   $(error Invalid JAVA_HOME detected: /usr/. Please set JAVA_HOME to a valid JDK installation path (e.g., /usr/lib/jvm/java-11-openjdk-amd64).)
+endif
+
+# Validate JAVA_HOME contains include directory
+JAVA_INCLUDE_DIR := $(JAVA_HOME)/include
+ifeq ($(wildcard $(JAVA_INCLUDE_DIR)),)
+  $(error JAVA_HOME does not contain an 'include' directory: $(JAVA_INCLUDE_DIR). Please verify JAVA_HOME points to a valid JDK installation.)
 endif
 
 # Platform-specific settings
