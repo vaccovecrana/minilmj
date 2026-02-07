@@ -4,8 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -107,14 +106,13 @@ public final class MiniLM implements AutoCloseable {
 
   private static void loadLibraryFromResource(String resourcePath, String libraryName) {
     var libraryStream = MiniLM.class.getResourceAsStream(resourcePath);
-
     try (libraryStream) {
       if (libraryStream == null) {
         throw new UnsatisfiedLinkError(
           "Native library not found in JAR: " + resourcePath +
-            ". Make sure the library is packaged in the JAR resources.");
+            ". Make sure the library is packaged in the JAR resources."
+        );
       }
-      // Create temporary file
       var prefix = "libminilm";
       var suffix = libraryName.contains(".dylib") ? ".dylib" : ".so";
       var tempLibraryFile = File.createTempFile(prefix, suffix);
@@ -140,12 +138,10 @@ public final class MiniLM implements AutoCloseable {
     if (text == null) {
       throw new IllegalArgumentException("Text cannot be null");
     }
-
-    float[] result = nEmbed(sessionHandle, text);
+    var result = nEmbed(sessionHandle, text);
     if (result == null) {
       throw new RuntimeException("Failed to generate embedding");
     }
-
     return result;
   }
 
@@ -155,62 +151,50 @@ public final class MiniLM implements AutoCloseable {
    * @param texts      List of input texts to embed
    * @param concurrent If true, process embeddings concurrently using a thread pool.
    *                   If false, process sequentially.
-   * @return List of embedding vectors, each as float[384]
+   * @return map of embedding vectors for each target String, each as float[384]
    * @throws RuntimeException if embedding generation fails
    */
-  public List<float[]> embedBatch(List<String> texts, boolean concurrent) {
+  public Map<String, float[]> embedBatch(List<String> texts, boolean concurrent) {
     if (texts == null) {
-      throw new IllegalArgumentException("Texts list cannot be null");
+      throw new IllegalArgumentException("Text list cannot be null");
     }
     if (texts.isEmpty()) {
-      return new ArrayList<>();
+      return new HashMap<>();
     }
 
-    List<float[]> results = new ArrayList<>(texts.size());
+    var results = new LinkedHashMap<String, Future<float[]>>(texts.size());
+    var out = new LinkedHashMap<String, float[]>();
 
     if (concurrent) {
-      // Use concurrent processing with instance executor service
       synchronized (this) {
         if (executorService == null || executorService.isShutdown()) {
           int numThreads = Runtime.getRuntime().availableProcessors();
           executorService = Executors.newFixedThreadPool(numThreads);
         }
       }
-
-      List<Future<float[]>> futures = new ArrayList<>(texts.size());
-      for (String text : texts) {
+      for (var text : texts) {
         if (text == null) {
           throw new IllegalArgumentException("Text in list cannot be null");
         }
-        Future<float[]> future = executorService.submit(() -> {
-          float[] result = nEmbed(sessionHandle, text);
-          if (result == null) {
-            throw new RuntimeException("Failed to generate embedding for: " + text);
-          }
-          return result;
-        });
-        futures.add(future);
+        results.put(text, executorService.submit(() -> nEmbed(sessionHandle, text)));
       }
-
-      // Collect results
-      for (Future<float[]> future : futures) {
+      for (var e : results.entrySet()) {
         try {
-          results.add(future.get());
-        } catch (Exception e) {
-          throw new RuntimeException("Failed to get embedding result", e);
+          out.put(e.getKey(), e.getValue().get());
+        } catch (Exception ex) {
+          out.put(e.getKey(), null);
         }
       }
     } else {
-      // Sequential processing
-      for (String text : texts) {
+      for (var text : texts) {
         if (text == null) {
           throw new IllegalArgumentException("Text in list cannot be null");
         }
-        results.add(embed(text));
+        out.put(text, embed(text));
       }
     }
 
-    return results;
+    return out;
   }
 
   @Override public void close() {

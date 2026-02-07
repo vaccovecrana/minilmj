@@ -43,7 +43,7 @@ public class MiniLMTest {
           double modelLoadTime = getTimeMs() - modelLoadStart;
           System.out.printf("Model loading time: %.2f ms%n", modelLoadTime);
           // Test cases matching C and Python tests
-          String[][] testCases = {
+          var testCases = new String[][] {
             // Standard capital city queries
             {"what's the capital of germany?", "berlin"},
             {"what's the capital of france?", "paris"},
@@ -289,22 +289,21 @@ public class MiniLMTest {
           );
           
           double startTime = getTimeMs();
-          List<float[]> embeddings = model.embedBatch(texts, false);
+          var embeddings = model.embedBatch(texts, false);
           double totalTime = getTimeMs() - startTime;
           
           assertEquals("Should return correct number of embeddings", texts.size(), embeddings.size());
-          
-          for (int i = 0; i < embeddings.size(); i++) {
-            float[] embedding = embeddings.get(i);
+
+          for (var e : embeddings.entrySet()) {
+            float[] embedding = e.getValue();
             assertNotNull("Embedding should not be null", embedding);
             assertEquals("Embedding should have size 384", EMBEDDING_SIZE, embedding.length);
-            
             // Check for NaN
             for (int j = 0; j < Math.min(10, embedding.length); j++) {
               assertFalse("Embedding should not contain NaN", Float.isNaN(embedding[j]));
             }
           }
-          
+
           double avgTime = totalTime / texts.size();
           System.out.printf("  Sequential batch processing:%n");
           System.out.printf("    - Processed %d embeddings in %.2f ms%n", texts.size(), totalTime);
@@ -330,21 +329,19 @@ public class MiniLMTest {
           );
           
           double startTime = getTimeMs();
-          List<float[]> embeddings = model.embedBatch(texts, true);
+          var embeddings = model.embedBatch(texts, true);
           double totalTime = getTimeMs() - startTime;
           
           assertEquals("Should return correct number of embeddings", texts.size(), embeddings.size());
           
           int successCount = 0;
-          for (int i = 0; i < embeddings.size(); i++) {
-            float[] embedding = embeddings.get(i);
+          for (var e : embeddings.entrySet()) {
+            float[] embedding = e.getValue();
             assertNotNull("Embedding should not be null", embedding);
             assertEquals("Embedding should have size 384", EMBEDDING_SIZE, embedding.length);
-            
-            // Check for NaN
             boolean hasNaN = false;
-            for (int j = 0; j < embedding.length; j++) {
-              if (Float.isNaN(embedding[j])) {
+            for (float v : embedding) {
+              if (Float.isNaN(v)) {
                 hasNaN = true;
                 break;
               }
@@ -352,7 +349,7 @@ public class MiniLMTest {
             assertFalse("Embedding should not contain NaN", hasNaN);
             successCount++;
           }
-          
+
           double avgTime = totalTime / texts.size();
           System.out.printf("  Concurrent batch processing:%n");
           System.out.printf("    - Processed %d embeddings in %.2f ms%n", texts.size(), totalTime);
@@ -370,7 +367,7 @@ public class MiniLMTest {
           float[][] cityEmbeddings = new float[5][];
           String[] cities = {"paris", "london", "berlin", "madrid", "rome"};
           for (int i = 0; i < 5; i++) {
-            cityEmbeddings[i] = embeddings.get(i);
+            cityEmbeddings[i] = embeddings.get(cities[i]);
           }
           
           // Extract query embeddings (indices 5-9 are queries)
@@ -385,8 +382,9 @@ public class MiniLMTest {
           
           int semanticPassed = 0;
           for (int q = 0; q < queries.length; q++) {
-            float[] queryEmbedding = embeddings.get(5 + q);
-            String expected = expectedAnswers[q];
+            var query = queries[q];
+            var queryEmbedding = embeddings.get(query);
+            var expected = expectedAnswers[q];
             
             // Find nearest neighbor using cosine similarity (dot product)
             int bestIndex = -1;
